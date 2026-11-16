@@ -2,7 +2,7 @@ name: Nepal · Boxoffice (Today)
 
 on:
   schedule:
-    - cron: "*/30 3-18 * * *"     # 08:45–00:15 Nepal, every 30 min
+    - cron: "10 * * * *"     # 08:45–00:15 Nepal, every 30 min
   workflow_dispatch:
 
 concurrency:
