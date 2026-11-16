@@ -4,12 +4,7 @@ on:
   schedule:
     # 03:00–18:30 UTC = 08:45–00:15 Nepal time, every 30 min
     - cron: "*/30 3-18 * * *"
-  workflow_dispatch:
-    inputs:
-      cutoff_minutes:
-        description: "Look-ahead window in minutes"
-        type: string
-        default: "1440"
+  workflow_dispatch:          # manual trigger, no inputs needed
 
 concurrency:
   group: nepal-data-write          # serialized with advance workflows
@@ -60,7 +55,7 @@ jobs:
         run: |
           python ../_code/nepal.py fetch \
             --mode boxoffice \
-            --cutoff-minutes ${{ inputs.cutoff_minutes || '1440' }} \
+            --cutoff-minutes 240 \
             --build
 
       - name: Commit & push to private repo
