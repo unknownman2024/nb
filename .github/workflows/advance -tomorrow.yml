@@ -2,8 +2,7 @@ name: Nepal · Advance (+1 day)
 
 on:
   schedule:
-    # 04:20 UTC = 10:05 AM Nepal (5 min after boxoffice :00 slot)
-    - cron: "20 4 * * *"
+    - cron: "20 4 * * *"          # 10:05 AM Nepal
   workflow_dispatch:
 
 concurrency:
@@ -19,19 +18,15 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - name: Checkout public repo (code)
-        uses: actions/checkout@v4
-        with:
-          path: _code
+      - uses: actions/checkout@v4
+        with: { path: _code }
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
-      - name: Install deps
-        run: pip install -r _code/requirements.txt
+      - run: pip install -r _code/requirements.txt
 
       - name: Prepare private data repo
         env:
@@ -62,10 +57,7 @@ jobs:
         working-directory: _data
         run: |
           git add -A
-          if git diff --cached --quiet; then
-            echo "No changes."
-            exit 0
-          fi
+          if git diff --cached --quiet; then echo "No changes."; exit 0; fi
           git commit -m "advance+1: $(TZ=Asia/Kathmandu date '+%Y-%m-%d %H:%M')"
           for i in 1 2 3; do
             if git push -u origin main; then exit 0; fi
