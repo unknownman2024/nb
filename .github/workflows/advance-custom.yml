@@ -1,0 +1,99 @@
+name: Nepal · Advance (Custom Date)
+
+# ═══════════════════════════════════════════════════════════
+#  👇 CHANGE THIS DATE, COMMIT, THEN RUN THE WORKFLOW
+# ═══════════════════════════════════════════════════════════
+env:
+  TARGET_DATE: "2026-12-12"        # YYYY-MM-DD (Nepal local)
+  SKIP_BUILD:  "false"             # "true" to skip aggregation
+  # ─────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:               # manual run from Actions tab
+  # Optional: auto-run daily near the target date.
+  # Uncomment when close to TARGET_DATE, then re-comment after.
+  # schedule:
+  #   - cron: "20 4 * * *"         # 10:05 AM Nepal daily
+
+concurrency:
+  group: nepal-data-write
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Validate env
+        run: |
+          if ! [[ "${TARGET_DATE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "::error::TARGET_DATE is not YYYY-MM-DD: ${TARGET_DATE}"
+            exit 1
+          fi
+          date -d "${TARGET_DATE}" +%Y-%m-%d >/dev/null 2>&1 || {
+            echo "::error::Not a valid calendar date: ${TARGET_DATE}"
+            exit 1
+          }
+          echo "🎯 Target: ${TARGET_DATE}  (skip_build=${SKIP_BUILD})"
+
+      - name: Checkout public repo (code)
+        uses: actions/checkout@v4
+        with:
+          path: _code
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r _code/requirements.txt
+
+      - name: Prepare private data repo
+        env:
+          TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          REMOTE="https://x-access-token:${TOKEN}@github.com/unknownman2024/Nepal-Boxoffice.git"
+          mkdir -p _data && cd _data
+          git init -b main >/dev/null
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add origin "$REMOTE" 2>/dev/null || git remote set-url origin "$REMOTE"
+          git fetch origin 2>/dev/null || true
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            git reset --hard origin/main
+          fi
+
+      - name: Fetch advance for TARGET_DATE + build
+        working-directory: _data
+        env:
+          NEPAL_TZ: Asia/Kathmandu
+        run: |
+          BUILD_FLAG=""
+          if [ "${SKIP_BUILD}" != "true" ]; then BUILD_FLAG="--build"; fi
+          python ../_code/nepal.py fetch \
+            --mode advance \
+            --date "${TARGET_DATE}" \
+            $BUILD_FLAG
+
+      - name: Commit & push to private repo
+        working-directory: _data
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git commit -m "advance ${TARGET_DATE}: $(TZ=Asia/Kathmandu date '+%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do
+            if git push -u origin main; then exit 0; fi
+            echo "Push retry $i..."
+            git pull --no-rebase -X ours origin main || true
+            sleep $((i * 3))
+          done
+          exit 1

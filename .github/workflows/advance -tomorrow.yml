@@ -1,0 +1,76 @@
+name: Nepal · Advance (+1 day)
+
+on:
+  schedule:
+    # 04:20 UTC = 10:05 AM Nepal (5 min after boxoffice :00 slot)
+    - cron: "20 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nepal-data-write
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout public repo (code)
+        uses: actions/checkout@v4
+        with:
+          path: _code
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r _code/requirements.txt
+
+      - name: Prepare private data repo
+        env:
+          TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          REMOTE="https://x-access-token:${TOKEN}@github.com/unknownman2024/Nepal-Boxoffice.git"
+          mkdir -p _data && cd _data
+          git init -b main >/dev/null
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add origin "$REMOTE" 2>/dev/null || git remote set-url origin "$REMOTE"
+          git fetch origin 2>/dev/null || true
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            git reset --hard origin/main
+          fi
+
+      - name: Fetch tomorrow's advance + build
+        working-directory: _data
+        env:
+          NEPAL_TZ: Asia/Kathmandu
+        run: |
+          python ../_code/nepal.py fetch \
+            --mode advance \
+            --offset 1 \
+            --build
+
+      - name: Commit & push to private repo
+        working-directory: _data
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git commit -m "advance+1: $(TZ=Asia/Kathmandu date '+%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do
+            if git push -u origin main; then exit 0; fi
+            echo "Push retry $i..."
+            git pull --no-rebase -X ours origin main || true
+            sleep $((i * 3))
+          done
+          exit 1
