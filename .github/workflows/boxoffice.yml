@@ -2,16 +2,15 @@ name: Nepal · Boxoffice (Today)
 
 on:
   schedule:
-    # 03:00–18:30 UTC = 08:45–00:15 Nepal time, every 30 min
-    - cron: "*/30 3-18 * * *"
-  workflow_dispatch:          # manual trigger, no inputs needed
+    - cron: "*/30 3-18 * * *"     # 08:45–00:15 Nepal, every 30 min
+  workflow_dispatch:
 
 concurrency:
-  group: nepal-data-write          # serialized with advance workflows
+  group: nepal-data-write
   cancel-in-progress: false
 
 permissions:
-  contents: read                    # no writes to the PUBLIC repo
+  contents: read
 
 jobs:
   run:
@@ -21,11 +20,9 @@ jobs:
     steps:
       - name: Checkout public repo (code)
         uses: actions/checkout@v4
-        with:
-          path: _code
+        with: { path: _code }
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
@@ -48,7 +45,7 @@ jobs:
             git reset --hard origin/main
           fi
 
-      - name: Fetch today's boxoffice + build
+      - name: Fetch today's boxoffice (cutoff 240) + build
         working-directory: _data
         env:
           NEPAL_TZ: Asia/Kathmandu
@@ -62,10 +59,7 @@ jobs:
         working-directory: _data
         run: |
           git add -A
-          if git diff --cached --quiet; then
-            echo "No changes."
-            exit 0
-          fi
+          if git diff --cached --quiet; then echo "No changes."; exit 0; fi
           git commit -m "boxoffice: $(TZ=Asia/Kathmandu date '+%Y-%m-%d %H:%M')"
           for i in 1 2 3; do
             if git push -u origin main; then exit 0; fi
